@@ -1,0 +1,155 @@
+--- Box.php.1	2021-09-15 21:42:41.908080000 +0200
++++ Box.php	2021-09-15 01:28:50.888080000 +0200
+@@ -81,6 +81,11 @@
+      */
+     protected $box;
+ 
++    /**
++     * @var bool
++     */
++    protected $overflow = false;
++    
+     public function __construct(&$image)
+     {
+         $this->im = $image;
+@@ -227,7 +232,8 @@
+             throw new \InvalidArgumentException('No path to font file has been specified.');
+         }
+ 
+-        switch ($this->textWrapping) {
++        if(!is_array($text)) {
++            switch ($this->textWrapping) {
+             case TextWrapping::NoWrap:
+                 $lines = array($text);
+                 break;
+@@ -235,6 +241,9 @@
+             default:
+                 $lines = $this->wrapTextWithOverflow($text);
+                 break;
++            }
++        } else {
++            $lines = $text;
+         }
+ 
+         if ($this->debug) {
+@@ -249,30 +258,30 @@
+         $textHeight = count($lines) * $lineHeightPx;
+ 
+         switch ($this->alignY) {
+-            case VerticalAlignment::Center:
+-                $yAlign = ($this->box->getHeight() / 2) - ($textHeight / 2);
+-                break;
+-            case VerticalAlignment::Bottom:
+-                $yAlign = $this->box->getHeight() - $textHeight;
+-                break;
+-            case VerticalAlignment::Top:
+-            default:
+-                $yAlign = 0;
++        case VerticalAlignment::Center:
++            $yAlign = ($this->box->getHeight() / 2) - ($textHeight / 2);
++            break;
++        case VerticalAlignment::Bottom:
++            $yAlign = $this->box->getHeight() - $textHeight;
++            break;
++        case VerticalAlignment::Top:
++        default:
++            $yAlign = 0;
+         }
+ 
+         $n = 0;
+         foreach ($lines as $line) {
+             $box = $this->calculateBox($line);
+             switch ($this->alignX) {
+-                case HorizontalAlignment::Center:
+-                    $xAlign = ($this->box->getWidth() - $box->getWidth()) / 2;
+-                    break;
+-                case HorizontalAlignment::Right:
+-                    $xAlign = ($this->box->getWidth() - $box->getWidth());
+-                    break;
+-                case HorizontalAlignment::Left:
+-                default:
+-                    $xAlign = 0;
++            case HorizontalAlignment::Center:
++                $xAlign = ($this->box->getWidth() - $box->getWidth()) / 2;
++                break;
++            case HorizontalAlignment::Right:
++                $xAlign = ($this->box->getWidth() - $box->getWidth());
++                break;
++            case HorizontalAlignment::Left:
++            default:
++                $xAlign = 0;
+             }
+             $yShift = $lineHeightPx * (1 - $this->baseline);
+ 
+@@ -345,7 +354,25 @@
+         $explicitLines = preg_split('/\n|\r\n?/', $text);
+         foreach ($explicitLines as $line) {
+             // Check every line if it needs to be wrapped
++
++            $array = Array("?", "!", "(");            
+             $words = explode(" ", $line);
++
++            do {
++                $c = false;
++                for($i = 0, $size = count($words); $i < $size; ++$i) {
++                    if(in_array($words[$i][0], $array)) {
++                        if(count($words) >= $i) {
++                            $words = array_merge(array_slice($words, 0, $i-1), Array($words[$i-1]. " " . $words[$i]), array_slice($words, $i+1));
++                        } else {
++                            $words = array_merge(array_slice($words, 0, $i-1), Array($words[$i-1]. " " . $words[$i]));
++                        }
++                        $c = true;
++                        break;
++                    }
++                }
++            } while($c);
++
+             $line = $words[0];
+             for ($i = 1; $i < count($words); $i++) {
+                 $box = $this->calculateBox($line." ".$words[$i]);
+@@ -369,6 +396,15 @@
+         return 0.75 * $this->fontSize;
+     }
+ 
++    /**
++     * @return bool
++     */
++    function isOverflow()
++    {
++        return $this->overflow;
++    }
++
++    
+     protected function drawFilledRectangle(Rectangle $rect, Color $color)
+     {
+         imagefilledrectangle(
+@@ -414,9 +450,9 @@
+         }
+     }
+ 
+-    protected function drawInternal(Point $position, Color $color, $text)
++    function drawInternal(Point $position, Color $color, $text)
+     {
+-        imagettftext(
++        $arr = imagettftext(
+             $this->im,
+             $this->getFontSizeInPoints(),
+             0, // no rotation
+@@ -426,5 +462,17 @@
+             $this->fontFace,
+             $text
+         );
++        
++        $height = imagesy($this->im);
++        
++        if($this->debug) {
++            print("<br>");
++            print($arr[1] . " - ");
++            print_r($height);
++        }
++
++        if($arr[1] > $height) {
++            $this->overflow = true;
++        }
+     }
+ }
